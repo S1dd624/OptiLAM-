@@ -1,0 +1,180 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+using System.Globalization;
+using HeuristicLab.Common;
+using HeuristicLab.Core;
+using HeuristicLab.Data;
+using HeuristicLab.Encodings.BinaryVectorEncoding;
+using HeuristicLab.Encodings.IntegerVectorEncoding;
+using HeuristicLab.Encodings.RealVectorEncoding;
+using HeuristicLab.Encodings.PermutationEncoding;
+using HeuristicLab.Encodings.LinearLinkageEncoding;
+using HeuristicLab.Encodings.SymbolicExpressionTreeEncoding;
+using HeuristicLab.Optimization;
+using HeuristicLab.Problems.Programmable;
+
+namespace HeuristicLab.Problems.Programmable {
+  public class CompiledSingleObjectiveProblemDefinition : CompiledProblemDefinition, ISingleObjectiveProblemDefinition {
+    public bool Maximization { get { return true; } }
+
+ public override void Initialize() {
+      
+    if( ((IntValue)vars.Generations).Value == 0){
+    ((IntValue)vars.chromoLength).Value = 25;
+    ((IntValue)vars.maxGen).Value= 5000;                     //compile code before every run to reset
+    }
+      
+    int n = ((IntValue)vars.chromoLength).Value;
+    int L = ((IntValue)vars.canvasLength).Value;
+    int H = ((IntValue)vars.canvasHeight).Value;
+    int numRot=((IntValue)vars.numRot).Value;
+    
+    
+    // Encoding X coordinates with different range
+    var xEncoding = new IntegerVectorEncoding("x", length: n, min: 0, max: L);
+    
+    // Encoding Y coordinates with a different range
+    var yEncoding = new IntegerVectorEncoding("y", length: n, min: 0, max: H);
+    
+    // Encoding rotation angles, using a step of 15 degrees (values 0, 15, 30, ..., 360)
+    var rotationEncoding = new IntegerVectorEncoding("rotation", length: n, min: 0, max: 360, step: 360/numRot);
+    
+    // Combining them into one MultiEncoding
+    Encoding = new MultiEncoding()
+        .Add(xEncoding)
+        .Add(yEncoding)
+        .Add(rotationEncoding);
+    
+    // Add more vectors to the MultiEncoding if needed for other parameters.
+    ((IntValue)vars.Generations).Value = 0;
+}
+
+  public double Evaluate(Individual individual, IRandom random) {
+    // Convert the chromosome to a string directly
+    string chromosome = ConvertChromosomeToString(individual);
+
+    // Call the external evaluator and capture the fitness
+    double fitness = RunExternalEvaluator(chromosome);
+
+    return fitness; // Return the fitness to HeuristicLab
+}
+
+
+     private string ConvertChromosomeToString(Individual individual) {
+    // Assuming individual is encoded using MultiEncoding (X, Y, Rotation)
+    var xValues = individual.IntegerVector("x");
+    var yValues = individual.IntegerVector("y");
+    var rotationValues = individual.IntegerVector("rotation");
+
+    // Prepare a line that contains all values in the format "x1,y1,r1,x2,y2,r2,..."
+    string line = "";
+
+    for (int i = 0; i < ((IntValue)vars.chromoLength).Value; i++) {
+        if (i > 0) line += ","; // Add a comma before each value after the first
+        line += xValues[i] + "," + yValues[i] + "," + rotationValues[i];
+    }
+
+    return line; // Return the chromosome string
+}
+
+
+    
+private double RunExternalEvaluator(string chromosome) {
+    // Call the external evaluator executable and pass the chromosome as an argument
+    System.Diagnostics.Process process = new System.Diagnostics.Process();
+    process.StartInfo.FileName = @"C:\Users\iitsi\FitnessEvaluatorApp\bin\Release\net9.0\win-x64\FitnessEvaluator.exe";
+    process.StartInfo.Arguments = chromosome;  // Pass the chromosome string as an argument
+    process.StartInfo.RedirectStandardOutput = true;  // Capture the standard output (fitness value)
+    process.StartInfo.UseShellExecute = false;
+    process.StartInfo.CreateNoWindow = true;
+
+    // Start the process
+    process.Start();
+
+    // Capture the output (which is the fitness value)
+    string fitnessStr = process.StandardOutput.ReadToEnd().Trim();
+    process.WaitForExit();
+
+    // Log the fitness string for debugging
+    Console.WriteLine(String.Format("Fitness from external evaluator: '{0}'", fitnessStr));
+
+    // Parse the fitness value
+    double fitness = double.Parse(fitnessStr, CultureInfo.InvariantCulture);
+    return fitness;
+}
+
+     
+
+    public void Analyze(Individual[] individuals, double[] qualities, ResultCollection results, IRandom random) {
+      // Use vars.yourVariable to access variables in the variable store i.e. yourVariable
+      // Write or update results given the range of vectors and resulting qualities
+      // Uncomment the following lines if you want to retrieve the best individual
+
+      var orderedIndividuals = individuals.Zip(qualities, (i, q) => new { Individual = i, Quality = q }).OrderBy(z => z.Quality);
+      var best = Maximization ? orderedIndividuals.Last().Quality : orderedIndividuals.First().Quality;
+                                                                       
+      //if (!results.ContainsKey("Best Solution")) {
+      //  results.Add(new Result("Best Solution", typeof(RealVector)));
+      //}
+      //results["Best Solution"].Value = (IItem)best.RealVector("r").Clone();
+         
+        
+        // Access the best fitness value from the results
+        double bestFitness = best;
+            if (!results.ContainsKey("Generations"))
+         {
+              // If not, create a new result for "Generation" with Integer type
+              results.Add(new Result("Generations", typeof(IntValue)));
+              results["Generations"].Value = new IntValue(0);
+         }
+         if (!results.ContainsKey("numberOfFPs"))
+         {
+              // If not, create a new result for "Generation" with Integer type
+              results.Add(new Result("numberOfFPs", typeof(IntValue)));
+              results["numberOfFPs"].Value = new IntValue(((IntValue)vars.chromoLength).Value);
+         }
+
+
+        //results["numberOfFPs"].Value = vars.chromoLength.Value;
+        IntValue currentGeneration = ((IntValue)(results["Generations"]).Value);
+        
+        // Optionally, log or print the current generation
+        Console.WriteLine(currentGeneration.Value);
+
+        // Check if the best fitness is less than 0 and generation has reached 2000
+        if (bestFitness < 0 && currentGeneration.Value >= ((IntValue)vars.maxGen).Value)
+        {
+            // Access the chromosome length from the algorithm's results
+            var chromosomeLength = ((IntValue)vars.chromoLength).Value;
+            
+            // Reduce the chromosome length by 1
+            chromosomeLength -= 1;
+
+            // Update the chromosome length back to the algorithm results
+            ((IntValue)vars.chromoLength).Value = chromosomeLength;
+            ((IntValue)vars.Generations).Value = currentGeneration.Value;
+            ((IntValue)vars.maxGen).Value +=5000;
+            Initialize();
+         }
+    }
+
+    public IEnumerable<Individual> GetNeighbors(Individual individual, IRandom random) {
+      // Use vars.yourVariable to access variables in the variable store i.e. yourVariable
+      // Create new vectors, based on the given one that represent small changes
+      // This method is only called from move-based algorithms (Local Search, Simulated Annealing, etc.)
+      while (true) {
+        // Algorithm will draw only a finite amount of samples
+        // Change to a for-loop to return a concrete amount of neighbors
+        var neighbor = individual.Copy();
+        // For instance, perform a single bit-flip in a binary parameter
+        //var bIndex = random.Next(neighbor.BinaryVector("b").Length);
+        //neighbor.BinaryVector("b")[bIndex] = !neighbor.BinaryVector("b")[bIndex];
+        yield return neighbor;
+      }
+    }
+
+    // Implement further classes and methods
+  }
+}
