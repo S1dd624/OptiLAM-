@@ -5,22 +5,16 @@ import cairosvg
 from PIL import Image
 from lxml import etree
 import re
-import copy
-import cv2
-import numpy as np
 
 
 def normalize_svg_canvas(svg_path):
     """Expands the smaller dimension of the SVG to match the larger one while centering the shape."""
-
-    # Load and parse the SVG file
     with open(svg_path, "r") as f:
         svg_content = f.read()
 
     parser = etree.XMLParser(remove_blank_text=True)
     root = etree.fromstring(svg_content.encode(), parser)
 
-    # Extract the viewBox if it exists, otherwise set default values
     viewBox = root.get("viewBox")
     if viewBox:
         x_min, y_min, width, height = map(float, viewBox.split())
@@ -30,139 +24,157 @@ def normalize_svg_canvas(svg_path):
         x_min, y_min = 0, 0
         root.set("viewBox", f"{x_min} {y_min} {width} {height}")
 
-    # Compute center
-    cx = x_min + width / 2
-    cy = y_min + height / 2
+    max_dim = max(width, height)
 
-    # Compute new side length to fit rotation
-    diagonal = math.sqrt(width**2 + height**2) + 15
+    if width < max_dim:
+        x_min -= (max_dim - width) / 2
+    if height < max_dim:
+        y_min -= (max_dim - height) / 2
 
-    # Compute new min_x and min_y to keep center fixed
-    new_x_min = cx - diagonal / 2
-    new_y_min = cy - diagonal / 2
+    root.set("viewBox", f"{x_min} {y_min} {max_dim} {max_dim}")
+    root.set("width", f"{max_dim}")
+    root.set("height", f"{max_dim}")
 
-    # Update viewBox
-    root.set("viewBox", f"{new_x_min} {new_y_min} {diagonal} {diagonal}")
-
-    root.set("width", str(diagonal))
-    root.set("height", str(diagonal))
-
-    # Add a White Background Rectangle
-    """bg_rect = etree.Element(
-        "rect",
-        x=str(new_x_min),
-        y=str(new_y_min),
-        width=str(diagonal),
-        height=str(diagonal),
-        fill="none",
-        stroke="none",
-    )
-    root.insert(0, bg_rect)  # Insert as the first element"""
-
-    return root, new_x_min, new_y_min, diagonal  # Return updated SVG and parameters
+    return root, x_min, y_min, max_dim
 
 
-def rotate_and_convert_to_bmp(
-    svg_path, output_svgs_folder, output_bmps_folder, angle_step=30, scale=0.25
-):
-    """Rotates the SVG in steps and outputs a BMP for each rotated version."""
+def convert_polygon_to_path(points):
+    """Convert a list of polygon points to an SVG path string."""
+    return "M " + " L ".join(f"{x},{y}" for x, y in points) + " Z"
 
+
+def replace_polygons_with_paths(root):
+    """Finds all <polygon> elements in the SVG and replaces them with <path> elements."""
+    polygon_elements = list(root.iter("{http://www.w3.org/2000/svg}polygon"))
+    print(f"  [DEBUG] Converting {len(polygon_elements)} polygons to paths...")
+
+    for i, polygon in enumerate(polygon_elements):
+        points_attr = polygon.get("points")
+        if not points_attr:
+            print(f"  [WARNING] Polygon {i} has no points attribute.")
+            continue
+
+        try:
+            points = [
+                (float(x), float(y))
+                for x, y in (p.split(",") for p in points_attr.strip().split())
+            ]
+            path_data = convert_polygon_to_path(points)
+        except Exception as e:
+            print(f"  [ERROR] Failed to convert polygon {i}: {e}")
+            continue
+
+        path_element = etree.Element("path")
+        path_element.set("d", path_data)
+        path_element.set("fill", polygon.get("fill", "none"))
+        path_element.set("stroke", polygon.get("stroke", "black"))
+
+        parent = polygon.getparent()
+        parent.replace(polygon, path_element)
+        print(f"  [SUCCESS] Replaced polygon {i} with path.")
+
+
+def rotate_and_convert_to_bmp(svg_path, output_svgs_folder, output_bmps_folder, angle_step=30):
     os.makedirs(output_svgs_folder, exist_ok=True)
     os.makedirs(output_bmps_folder, exist_ok=True)
 
-    # Extract layer number (LLL) from filename using regex
-    match = re.search(r"(\d{3})\.svg$", svg_path)
+    match = re.search(r"(\d{3})\.svg$", os.path.basename(svg_path))
     if not match:
         print(f"Skipping file {svg_path}: Could not extract layer number.")
         return
-    LLL = match.group(1)  # Extracted layer number (e.g., "001")
+    LLL = match.group(1)
 
-    # Normalize SVG
     root, x_min, y_min, max_dim = normalize_svg_canvas(svg_path)
+    replace_polygons_with_paths(root)
 
-    # **Save the processed (viewBox-adjusted) SVG**
+    # Re-parse the root to refresh internal state
+    root_str = etree.tostring(root)
+    root = etree.fromstring(root_str)
+
+    paths = list(root.iter("{http://www.w3.org/2000/svg}path"))
+
+    if not paths:
+        print(f"Skipping file {svg_path}: No paths found after conversion.")
+        return
+
     normalized_svg_path = os.path.join(output_svgs_folder, f"{LLL}.svg")
     with open(normalized_svg_path, "wb") as f:
         f.write(etree.tostring(root, pretty_print=True))
     print(f"Saved normalized SVG: {normalized_svg_path}")
 
-    # Define center for rotation
+    bg_rect = etree.Element(
+        "rect",
+        x=str(x_min),
+        y=str(y_min),
+        width=str(max_dim),
+        height=str(max_dim),
+        fill="white",
+    )
+    root.insert(0, bg_rect)
+
     cx, cy = x_min + (max_dim / 2), y_min + (max_dim / 2)
 
-    # Define the SVG namespace
-    ns = {"svg": "http://www.w3.org/2000/svg"}
-
-    # Find all polygons
-    polygons = root.findall(".//svg:polygon", namespaces=ns)
-    if not polygons:
-        print(f"Skipping file {svg_path}: No polygons found.")
-        return
-
     for angle in range(0, 360, angle_step):
-        rotated_root = copy.deepcopy(root)  # Fresh copy for this rotation
-        rotated_polygons = rotated_root.findall(".//svg:polygon", namespaces=ns)
+        root_copy = etree.fromstring(etree.tostring(root))
+        paths_copy = list(root_copy.iter("{http://www.w3.org/2000/svg}path"))
 
-        for polygon in rotated_polygons:
-            polygon.set("transform", f"rotate({angle}, {cx}, {cy})")
+        for path in paths_copy:
+            if path.get("d") is None:
+                continue
+            path.set("transform", f"rotate({angle}, {cx}, {cy})")
 
-            # Modify Existing Style Attribute
-            style = polygon.get("style", "")
+            style = path.get("style", "")
             if "fill:none" in style:
                 style = style.replace("fill:none", "fill:black")
-            else:
-                style += ";fill:black"
-            polygon.set("style", style.strip())
+            elif "fill:" not in style:
+                style += ";fill:black" if style else "fill:black"
+            path.set("style", style.strip())
 
-        # Convert rotated_root to PNG
-        svg_bytes = etree.tostring(rotated_root, pretty_print=True)
-        png_data = cairosvg.svg2png(bytestring=svg_bytes, scale=scale)
+        svg_bytes = etree.tostring(root_copy, pretty_print=True)
+        try:
+            png_data = cairosvg.svg2png(
+                bytestring=svg_bytes, output_width=int(max_dim), output_height=int(max_dim)
+            )
+        except Exception as e:
+            print(f"Error converting SVG to PNG at angle {angle}: {e}")
+            continue
 
-        # Convert to strictly black-and-white BMP
         img = Image.open(io.BytesIO(png_data)).convert("L")
+        bw = img.point(lambda p: 0 if p < 200 else 255, "1")
 
-        # Adjust Threshold for Better Contour Isolation
-        bw = img.point(lambda p: 255 if p < 200 else 0, "1")  # black/white separation
-
-        # -----> START DILATION STEP
-        bw_np = np.array(bw, dtype=np.uint8) * 255  # convert back to 0-255
-        kernel = np.ones((3, 3), np.uint8)  # 3x3 square structuring element
-        dilated = cv2.dilate(bw_np, kernel, iterations=1)
-        dilated = cv2.bitwise_not(dilated)
-        dilated_img = Image.fromarray(dilated).convert(
-            "1"
-        )  # back to Pillow Image (mode "1")
-        # -----> END DILATION STEP
-
-        # Define Output BMP Filename
         bmp_filename = f"{LLL}_00_{angle:03d}.bmp"
         bmp_path = os.path.join(output_bmps_folder, bmp_filename)
-
-        # Save BMP
-        dilated_img.save(bmp_path, "BMP")
+        bw.save(bmp_path, "BMP")
         print(f"Saved BMP: {bmp_path}")
 
     print(f"Processed {360 // angle_step} images for {svg_path}")
 
 
-def batch_process_svgs(
-    input_folder, output_svgs_folder, output_bmps_folder, angle_step=30, scale=0.25
-):
-    """Processes all SVG files in the input folder."""
-
-    # Ensure output folders exist
+def batch_process_svgs(input_folder, output_svgs_folder, output_bmps_folder, angle_step=30):
     os.makedirs(output_svgs_folder, exist_ok=True)
     os.makedirs(output_bmps_folder, exist_ok=True)
 
-    # Process all SVG files
-    for filename in sorted(os.listdir(input_folder)):
-        if filename.endswith(".svg"):
-            svg_path = os.path.join(input_folder, filename)
-            rotate_and_convert_to_bmp(
-                svg_path, output_svgs_folder, output_bmps_folder, angle_step, scale
-            )
+    svg_files = [f for f in sorted(os.listdir(input_folder)) if f.endswith(".svg")]
+    if not svg_files:
+        print(f"No SVG files found in {input_folder}")
+        return
+
+    print(f"Found {len(svg_files)} SVG files to process:")
+    for filename in svg_files:
+        svg_path = os.path.join(input_folder, filename)
+        print(f"\n{'='*60}\nProcessing: {filename}\n{'='*60}")
+        try:
+            rotate_and_convert_to_bmp(svg_path, output_svgs_folder, output_bmps_folder, angle_step)
+        except Exception as e:
+            print(f"Error processing {filename}: {e}")
+            import traceback
+            traceback.print_exc()
 
 
-# Example usage: Process all SVGs in "input_svgs" folder and save processed SVGs and BMPs
-angle_step = 30
-scale = 0.25
-batch_process_svgs("input_svgs", "output_svgs", "output_bmps", angle_step, scale)
+if __name__ == "__main__":
+    batch_process_svgs(
+r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\input_svgs",
+  r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\output_svgs",
+  r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\output_bmps",
+  angle_step=45) # use 45 degrees since that's what your evaluator expects (0,45,...,315))
+
