@@ -1,5 +1,7 @@
 Developing for OptiLAM (Optimal Laminated Additive Manufacturing)
-1. Genetic algorithm creates x (sheet width), y (sheet length) and r (roation) sequences.
-2. Sequences are passed to a fitness evaluator to obtain best possible configuration.
-3. Scalable vector graphic files (rotator and placer) use OpenCV to create shapes on a canvas for object to be printed.
-4. Python g code is loaded to machine to print the object.
+1. SVG_rotator normalizes input svgs to bitmaps.
+2. Bitmaps, along with generated chromosomes(x,y,theta) are given to fitness evaluator
+3. Fitness evaluator computes the fitness score for each bitmap
+4. The genetic algorithm calls the fitness evaluator to find the best solution
+5. SVG_placer assembles the output svgs.
+6. Python g code is loaded to machine to print the object.
