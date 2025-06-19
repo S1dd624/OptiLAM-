@@ -6,9 +6,7 @@ from PIL import Image
 from lxml import etree
 import re
 
-
 def normalize_svg_canvas(svg_path):
-    """Expands the smaller dimension of the SVG to match the larger one while centering the shape."""
     with open(svg_path, "r") as f:
         svg_content = f.read()
 
@@ -37,65 +35,62 @@ def normalize_svg_canvas(svg_path):
 
     return root, x_min, y_min, max_dim
 
+def lines_to_path(root):
+    NS = "http://www.w3.org/2000/svg"
+    line_elements = list(root.iter(f"{{{NS}}}line"))
+    print(f"  [DEBUG] Converting {len(line_elements)} lines to path...")
 
-def convert_polygon_to_path(points):
-    """Convert a list of polygon points to an SVG path string."""
-    return "M " + " L ".join(f"{x},{y}" for x, y in points) + " Z"
+    points = []
 
-
-def replace_polygons_with_paths(root):
-    """Finds all <polygon> elements in the SVG and replaces them with <path> elements."""
-    polygon_elements = list(root.iter("{http://www.w3.org/2000/svg}polygon"))
-    print(f"  [DEBUG] Converting {len(polygon_elements)} polygons to paths...")
-
-    for i, polygon in enumerate(polygon_elements):
-        points_attr = polygon.get("points")
-        if not points_attr:
-            print(f"  [WARNING] Polygon {i} has no points attribute.")
-            continue
-
+    for line in line_elements:
         try:
-            points = [
-                (float(x), float(y))
-                for x, y in (p.split(",") for p in points_attr.strip().split())
-            ]
-            path_data = convert_polygon_to_path(points)
-        except Exception as e:
-            print(f"  [ERROR] Failed to convert polygon {i}: {e}")
+            x1, y1 = float(line.get("x1")), float(line.get("y1"))
+            x2, y2 = float(line.get("x2")), float(line.get("y2"))
+        except (TypeError, ValueError):
             continue
+        points.append((x1, y1))
+        points.append((x2, y2))
+        parent = line.getparent()
+        parent.remove(line)
 
-        path_element = etree.Element("path")
-        path_element.set("d", path_data)
-        path_element.set("fill", polygon.get("fill", "none"))
-        path_element.set("stroke", polygon.get("stroke", "black"))
+    if not points:
+        print("  [WARNING] No points found from lines.")
+        return False
 
-        parent = polygon.getparent()
-        parent.replace(polygon, path_element)
-        print(f"  [SUCCESS] Replaced polygon {i} with path.")
+    path_data = "M " + " L ".join(f"{x},{y}" for x, y in points) + " Z"
+    path_element = etree.Element(f"{{{NS}}}path")
+    path_element.set("d", path_data)
+    path_element.set("fill", "black")
+    path_element.set("stroke", "black")
+
+    g_elem = root.find(f"{{{NS}}}g")
+    if g_elem is not None:
+        g_elem.append(path_element)
+    else:
+        root.append(path_element)
+
+    print(f"  [SUCCESS] Created namespaced path from {len(points)} points.")
+    return True
+
 
 
 def rotate_and_convert_to_bmp(svg_path, output_svgs_folder, output_bmps_folder, angle_step=30):
     os.makedirs(output_svgs_folder, exist_ok=True)
     os.makedirs(output_bmps_folder, exist_ok=True)
 
-    match = re.search(r"(\d{3})\.svg$", os.path.basename(svg_path))
+    match = re.search(r"_(\d+)\.svg$", os.path.basename(svg_path))
     if not match:
         print(f"Skipping file {svg_path}: Could not extract layer number.")
         return
-    LLL = match.group(1)
+    LLL = match.group(1).zfill(3)
 
     root, x_min, y_min, max_dim = normalize_svg_canvas(svg_path)
-    replace_polygons_with_paths(root)
-
-    # Re-parse the root to refresh internal state
-    root_str = etree.tostring(root)
-    root = etree.fromstring(root_str)
-
+    success = lines_to_path(root)
     paths = list(root.iter("{http://www.w3.org/2000/svg}path"))
-
-    if not paths:
-        print(f"Skipping file {svg_path}: No paths found after conversion.")
+    if not success or not paths:
+        print(f"Skipping file {svg_path}: No paths found after line conversion.")
         return
+
 
     normalized_svg_path = os.path.join(output_svgs_folder, f"{LLL}.svg")
     with open(normalized_svg_path, "wb") as f:
@@ -103,15 +98,9 @@ def rotate_and_convert_to_bmp(svg_path, output_svgs_folder, output_bmps_folder, 
     print(f"Saved normalized SVG: {normalized_svg_path}")
 
     bg_rect = etree.Element(
-        "rect",
-        x=str(x_min),
-        y=str(y_min),
-        width=str(max_dim),
-        height=str(max_dim),
-        fill="white",
+        "rect", x=str(x_min), y=str(y_min), width=str(max_dim), height=str(max_dim), fill="white"
     )
     root.insert(0, bg_rect)
-
     cx, cy = x_min + (max_dim / 2), y_min + (max_dim / 2)
 
     for angle in range(0, 360, angle_step):
@@ -119,10 +108,7 @@ def rotate_and_convert_to_bmp(svg_path, output_svgs_folder, output_bmps_folder, 
         paths_copy = list(root_copy.iter("{http://www.w3.org/2000/svg}path"))
 
         for path in paths_copy:
-            if path.get("d") is None:
-                continue
             path.set("transform", f"rotate({angle}, {cx}, {cy})")
-
             style = path.get("style", "")
             if "fill:none" in style:
                 style = style.replace("fill:none", "fill:black")
@@ -147,9 +133,6 @@ def rotate_and_convert_to_bmp(svg_path, output_svgs_folder, output_bmps_folder, 
         bw.save(bmp_path, "BMP")
         print(f"Saved BMP: {bmp_path}")
 
-    print(f"Processed {360 // angle_step} images for {svg_path}")
-
-
 def batch_process_svgs(input_folder, output_svgs_folder, output_bmps_folder, angle_step=30):
     os.makedirs(output_svgs_folder, exist_ok=True)
     os.makedirs(output_bmps_folder, exist_ok=True)
@@ -170,11 +153,10 @@ def batch_process_svgs(input_folder, output_svgs_folder, output_bmps_folder, ang
             import traceback
             traceback.print_exc()
 
-
 if __name__ == "__main__":
     batch_process_svgs(
-r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\input_svgs",
-  r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\output_svgs",
-  r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\output_bmps",
-  angle_step=45) # use 45 degrees since that's what your evaluator expects (0,45,...,315))
-
+        r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\PRISM SLICES HATCHED",
+        r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\osvgs",
+        r"C:\Users\iitsi\Nesting_GA\Nesting_GA\Files\final_generator\obmps",
+        angle_step=45
+    )
