@@ -6,3 +6,4 @@ Plan to input these 3 paramters via GUI dialog. All smooth sailing after.
 
 Automation 8_fix handling slices, Nest_new.cpp handling .nc
 
+IceSL: A slicing software, prerequisite. But conflicts with current PC specs. Roadblock.
