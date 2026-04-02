@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OptiLAM Pipeline — Developer Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: Georgia, 'Times New Roman', serif;
+            background: #fff;
+            color: #111;
+            overflow: hidden;
+            height: 100vh
+        }
+
+        .slide {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            padding: 48px 64px;
+            opacity: 0;
+            pointer-events: none;
+            overflow-y: auto
+        }
+
+        .slide.active {
+            opacity: 1;
+            pointer-events: all
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: bold;
+            border-bottom: 2px solid #000;
+            padding-bottom: 6px;
+            margin-bottom: 16px
+        }
+
+        h2 {
+            font-size: 1.15rem;
+            font-weight: bold;
+            margin: 18px 0 8px;
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        h3 {
+            font-size: 1rem;
+            font-weight: bold;
+            margin: 12px 0 4px
+        }
+
+        p,
+        li,
+        td,
+        th {
+            font-size: .9rem;
+            line-height: 1.6
+        }
+
+        ul,
+        ol {
+            padding-left: 20px;
+            margin: 4px 0 10px
+        }
+
+        li {
+            margin: 3px 0
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0 14px
+        }
+
+        th,
+        td {
+            border: 1px solid #000;
+            padding: 5px 10px;
+            text-align: left;
+            font-size: .85rem
+        }
+
+        th {
+            background: #000;
+            color: #fff;
+            font-weight: normal
+        }
+
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: .85em;
+            background: #eee;
+            padding: 1px 4px
+        }
+
+        pre {
+            background: #f5f5f5;
+            border: 1px solid #ccc;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: .8rem;
+            line-height: 1.55;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace
+        }
+
+        .box {
+            border: 1px solid #000;
+            padding: 10px 14px;
+            margin: 8px 0
+        }
+
+        .box-title {
+            font-weight: bold;
+            margin-bottom: 4px
+        }
+
+        .cols {
+            display: flex;
+            gap: 24px
+        }
+
+        .cols>div {
+            flex: 1
+        }
+
+        .diagram {
+            font-family: 'Courier New', monospace;
+            font-size: .85rem;
+            line-height: 1.5;
+            background: #f5f5f5;
+            border: 1px solid #ccc;
+            padding: 12px;
+            margin: 8px 0;
+            white-space: pre
+        }
+
+        .note {
+            border-left: 3px solid #000;
+            padding-left: 10px;
+            margin: 10px 0;
+            font-style: italic;
+            font-size: .85rem;
+            color: #333
+        }
+
+        nav {
+            position: fixed;
+            bottom: 16px;
+            right: 24px;
+            display: flex;
+            gap: 6px;
+            z-index: 99
+        }
+
+        nav button {
+            width: 36px;
+            height: 36px;
+            border: 1px solid #000;
+            background: #fff;
+            cursor: pointer;
+            font-size: 1rem
+        }
+
+        nav button:hover {
+            background: #000;
+            color: #fff
+        }
+
+        .counter {
+            position: fixed;
+            bottom: 20px;
+            left: 24px;
+            font-size: .75rem;
+            color: #666;
+            font-family: 'Courier New', monospace
+        }
+
+        @media(max-width:768px) {
+            .cols {
+                flex-direction: column
+            }
+
+            body .slide {
+                padding: 24px 20px
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="deck">
+
+        <!-- 0 -->
+        <div class="slide active">
+            <h1>OptiLAM: Nesting Pipeline for Laminated Additive Manufacturing</h1>
+            <p style="margin-bottom:12px">A developer guide to the full SVG-to-G-Code pipeline. This presentation
+                assumes familiarity with 2D nesting concepts (bounding-box algorithms) and introduces the genetic
+                algorithm approach used in OptiLAM.</p>
+            <h2>Scope</h2>
+            <table>
+                <tr>
+                    <th>Topic</th>
+                    <th>Coverage</th>
+                </tr>
+                <tr>
+                    <td>What is LAM and why nesting matters</td>
+                    <td>Slide 1</td>
+                </tr>
+                <tr>
+                    <td>Bounding-box vs. genetic algorithm nesting</td>
+                    <td>Slide 2</td>
+                </tr>
+                <tr>
+                    <td>The 5-step pipeline overview</td>
+                    <td>Slide 3</td>
+                </tr>
+                <tr>
+                    <td>Step 1: SVG Rotator (Python)</td>
+                    <td>Slide 4</td>
+                </tr>
+                <tr>
+                    <td>Step 2: Fitness Evaluator (C# / .NET)</td>
+                    <td>Slide 5</td>
+                </tr>
+                <tr>
+                    <td>Step 3: Genetic Algorithm (HeuristicLab)</td>
+                    <td>Slide 6</td>
+                </tr>
+                <tr>
+                    <td>Step 4: SVG Placer + Inkscape post-processing</td>
+                    <td>Slide 7</td>
+                </tr>
+                <tr>
+                    <td>Step 5: EzCad2 Automation (Python / pywinauto)</td>
+                    <td>Slide 8</td>
+                </tr>
+                <tr>
+                    <td>Step 6: CNC / G-Code Generator</td>
+                    <td>Slide 9</td>
+                </tr>
+                <tr>
+                    <td>Operational experience and run data</td>
+                    <td>Slide 10</td>
+                </tr>
+                <tr>
+                    <td>Improvement roadmap</td>
+                    <td>Slide 11</td>
+                </tr>
+                <tr>
+                    <td>Dependencies and setup</td>
+                    <td>Slide 12</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- 1 -->
+        <div class="slide">
+            <h1>Laminated Additive Manufacturing</h1>
+            <p>LAM builds 3D objects by stacking thin 2D cross-sections of material. A slicer produces N layers as SVG
+                files. Each layer is laser-marked or laser-cut on a flat sheet, then sheets are stacked with adhesive to
+                form the final part.</p>
+            <h2>The Nesting Problem</h2>
+            <p>With 30 slices per object, each must be placed on a 400x400 mm manufacturing bed. Efficient packing
+                minimises wasted material and reduces total machine time.</p>
+            <h2>Three Machine Parameters</h2>
+            <table>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>Slicing thickness</td>
+                    <td>0.1 mm</td>
+                    <td>Z-axis increment per layer</td>
+                </tr>
+                <tr>
+                    <td>Laser time delay</td>
+                    <td>40 s</td>
+                    <td>Dwell time for laser marking</td>
+                </tr>
+                <tr>
+                    <td>Bed height</td>
+                    <td>78 / 95 mm</td>
+                    <td>Initial contact / clearance height, incremented per layer</td>
+                </tr>
+            </table>
+            <p>These three values are input via a Tkinter GUI dialog. Currently, only laser delay is treated as dynamic;
+                Z and time increment progressively in code.</p>
+        </div>
+
+        <!-- 2 -->
+        <div class="slide">
+            <h1>Bounding-Box Nesting vs. Genetic Algorithm</h1>
+            <div class="cols">
+                <div>
+                    <h2>Bounding-Box Approach</h2>
+                    <ul>
+                        <li>Each part is enclosed in its axis-aligned bounding rectangle</li>
+                        <li>Packing uses shelf or guillotine algorithms on these rectangles</li>
+                        <li>Ignores actual part geometry — large waste for irregular shapes</li>
+                        <li>Rotation typically limited to 0 and 90 degrees</li>
+                        <li>Deterministic: produces one solution</li>
+                        <li>Fast, but quality is poor for non-rectangular parts</li>
+                    </ul>
+                </div>
+                <div>
+                    <h2>Genetic Algorithm Approach</h2>
+                    <ul>
+                        <li>Works on rasterised pixel geometry (BMPs), not bounding boxes</li>
+                        <li>Tests 8 rotation angles per part (45-degree steps)</li>
+                        <li>Detects real overlap via bitwise pixel operations</li>
+                        <li>Population-based search: many candidates evaluated per generation</li>
+                        <li>Evolves over thousands of generations — progressively better</li>
+                        <li>Can discover multiple distinct good solutions</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="note">The GA trades compute time for solution quality. A 12-hour run can evaluate over 1,000,000
+                candidate placements — impossible with brute-force enumeration on 30 parts with 8 rotation choices each.
+            </div>
+        </div>
+
+        <!-- 3 -->
+        <div class="slide">
+            <h1>The 6-Step Pipeline</h1>
+            <div class="diagram"> +----------------+ +-------------------+ +------------------+
+                | 1. SVG Rotator |---->| 2. Fitness |---->| 3. HeuristicLab |
+                | (Python) | | Evaluator (C#) | | GA (.hl) |
+                +----------------+ +-------------------+ +------------------+
+                | | |
+                input SVGs output_bmps/ best chromosome
+                -> normalised BMPs -> fitness scalar (X, Y, R per part)
+                | | |
+                v v v
+                +-------------------+ +------------------+ +------------------+
+                | 4. SVG Placer |---->| 5. EzCad2 | | 6. CNC Generator |
+                | (Python) | | Automation | | (Python) |
+                | + Inkscape post | | (pywinauto) | | -> .nc file |
+                +-------------------+ +------------------+ +------------------+
+                | | |
+                assembled .svg automated laser NC G-code for
+                for EzCad2 marking loop machine control</div>
+            <h2>Data at each boundary</h2>
+            <table>
+                <tr>
+                    <th>Step</th>
+                    <th>Input</th>
+                    <th>Output</th>
+                </tr>
+                <tr>
+                    <td>1. SVG Rotator</td>
+                    <td>Raw SVG slices (001.svg ... 030.svg)</td>
+                    <td>BMP library: 001_00_000.bmp ... 030_00_315.bmp</td>
+                </tr>
+                <tr>
+                    <td>2. Fitness Evaluator</td>
+                    <td>Chromosome string + BMP folder path</td>
+                    <td>Single fitness value (stdout)</td>
+                </tr>
+                <tr>
+                    <td>3. GA Optimizer</td>
+                    <td>Fitness function (the .exe from Step 2)</td>
+                    <td>Best chromosome: [X1,Y1,R1, ..., XN,YN,RN]</td>
+                </tr>
+                <tr>
+                    <td>4. SVG Placer</td>
+                    <td>Best chromosome + normalised SVGs</td>
+                    <td>Assembled SVG layout</td>
+                </tr>
+                <tr>
+                    <td>5. EzCad2 Automation</td>
+                    <td>Assembled SVG file path + layer count</td>
+                    <td>Physical laser-marked layers (machine output)</td>
+                </tr>
+                <tr>
+                    <td>6. CNC Generator</td>
+                    <td>Best chromosome positions/rotations</td>
+                    <td>.nc G-code file</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- 4 -->
+        <div class="slide">
+            <h1>Step 1: SVG Rotator</h1>
+            <p>File: <code>svg_rotator.py</code> / <code>SVGtoBMP- editable.txt</code>. Language: Python. Libraries:
+                <code>cairosvg</code>, <code>Pillow</code>, <code>lxml</code>.
+            </p>
+            <h2>Process</h2>
+            <ol>
+                <li>Read each input SVG (named <code>LLL.svg</code>, e.g. <code>001.svg</code>)</li>
+                <li>Normalise the canvas: pad viewBox to a square, centre the geometry</li>
+                <li>Convert all SVG primitives to <code>&lt;path&gt;</code> elements (polygon, rect, circle, ellipse,
+                    line, polyline)</li>
+                <li>For each rotation angle (0, 45, 90, ..., 315 degrees):
+                    <ul>
+                        <li>Apply <code>rotate(angle, cx, cy)</code> transform to all paths</li>
+                        <li>Force <code>fill:black</code> on all shapes</li>
+                        <li>Render to PNG via CairoSVG, convert to grayscale, threshold to black-and-white, save as BMP
+                        </li>
+                    </ul>
+                </li>
+            </ol>
+            <h2>Naming Convention</h2>
+            <pre>{LLL}_00_{angle:03d}.bmp
+Example: 001_00_045.bmp = part 1, rotated 45 degrees</pre>
+            <h2>Why convert to BMP?</h2>
+            <div class="box">SVGs use arbitrary coordinate systems and are fragile for Boolean overlap detection. BMPs
+                are discrete uniform grids. Overlap detection becomes simple pixel arithmetic: <code>BitwiseOR</code>,
+                <code>CountNonZero</code>.
+            </div>
+        </div>
+
+        <!-- 5 -->
+        <div class="slide">
+            <h1>Step 2: Fitness Evaluator</h1>
+            <p>File: <code>Fittnessfn- editable.txt</code>. Language: C#. Framework: .NET. Dependency:
+                <code>OpenCvSharp</code>. Compiled to standalone <code>.exe</code> via Visual Studio.
+            </p>
+            <h2>Chromosome Encoding</h2>
+            <pre>Input (args[0]): "X1,Y1,R1,X2,Y2,R2,...,XN,YN,RN"
+Three integers per part: X position, Y position, Rotation index</pre>
+            <h2>Evaluation Logic</h2>
+            <pre>Canvas = blank 100x100 pixel grid (4 mm/pixel = 400x400 mm bed)
+
+For each part i:
+    Load BMP file: {i+1:03d}_00_{Ri:03d}.bmp
+    Compute kerf scale: scale = 1 + kerf / min(rows, cols)
+    Place BMP at (Xi, Yi) on canvas via BitwiseOR
+
+overlapS = sum(individual_areas) - CountNonZero(canvas)
+
+If overlapS > 0:   fitness = -overlapS          (penalty)
+If overlapS <= 0:   fitness = left_margin + right_margin   (reward)</pre>
+            <h2>Key Design Points</h2>
+            <table>
+                <tr>
+                    <th>Aspect</th>
+                    <th>Detail</th>
+                </tr>
+                <tr>
+                    <td>Kerf handling</td>
+                    <td>Logical dilation ensures physical clearance (10 mm default)</td>
+                </tr>
+                <tr>
+                    <td>Overlap detection</td>
+                    <td>BitwiseOR means overlapping pixels are counted once; difference from sum reveals hidden overlap
+                    </td>
+                </tr>
+                <tr>
+                    <td>Positive fitness</td>
+                    <td>Measures unused horizontal margins — tighter packing = higher score</td>
+                </tr>
+                <tr>
+                    <td>Exit contract</td>
+                    <td><code>Console.WriteLine(fitness)</code> — HeuristicLab reads this single number from stdout</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- 6 -->
+        <div class="slide">
+            <h1>Step 3: Genetic Algorithm (HeuristicLab 3.3)</h1>
+            <p>File: <code>GAcodeforHL- editable.hl</code>. This is a binary project file, editable only inside
+                HeuristicLab on Windows.</p>
+            <h2>How It Works</h2>
+            <ol>
+                <li>Initialise a population of random chromosomes (integer vectors of length 3N)</li>
+                <li>For each chromosome, call the compiled C# fitness evaluator as an external process</li>
+                <li>Select the fittest individuals for reproduction</li>
+                <li>Apply crossover operators to combine parent chromosomes</li>
+                <li>Apply mutation to introduce random variation</li>
+                <li>Repeat for many thousands of generations</li>
+            </ol>
+            <h2>Operational Considerations</h2>
+            <div class="box">
+                <p class="box-title">Runtime</p>
+                <p>HeuristicLab does not run well on ordinary laptops. Expect 12 to 21 hour overnight runs on the lab
+                    workstation. The .hl file stores all run state internally. Runs must be saved before closing the
+                    application.</p>
+            </div>
+            <h2>Crossover Operators (Configurable)</h2>
+            <table>
+                <tr>
+                    <th>Operator</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>Rounded Average Crossover</td>
+                    <td>Averages parent genes, rounds to integer</td>
+                </tr>
+                <tr>
+                    <td>Discrete Crossover</td>
+                    <td>Randomly selects each gene from one parent</td>
+                </tr>
+                <tr>
+                    <td>Rounded Blend Alpha-Beta (alpha=0.75)</td>
+                    <td>Interpolates between parents within an expanded range</td>
+                </tr>
+            </table>
+            <p>These are tunable hyperparameters. Different crossover strategies explore the solution space differently.
+                There is no single best configuration — experimentation over multiple runs is required.</p>
+        </div>
+
+        <!-- 7 -->
+        <div class="slide">
+            <h1>Step 4: SVG Placer + Inkscape Post-Processing</h1>
+            <p>Files: <code>svg_placer_for_ezcad.py</code>, <code>the_final_placeer.py</code>. Language: Python.
+                Library: <code>lxml</code>.</p>
+            <h2>Two Assembly Approaches</h2>
+            <table>
+                <tr>
+                    <th>File</th>
+                    <th>Method</th>
+                    <th>Trade-off</th>
+                </tr>
+                <tr>
+                    <td>svg_placer_for_ezcad.py</td>
+                    <td>Wraps SVG children in nested <code>&lt;g transform="rotate/translate"&gt;</code> groups</td>
+                    <td>Preserves SVG structure; may cause EzCad2 misinterpretation</td>
+                </tr>
+                <tr>
+                    <td>the_final_placeer.py</td>
+                    <td>Applies rotation and translation directly to path coordinates via trigonometry; emits flat
+                        <code>&lt;path&gt;</code> elements
+                    </td>
+                    <td>No nested groups; cleaner for downstream software</td>
+                </tr>
+            </table>
+            <p>Both multiply X/Y values by 4 to convert from evaluator grid coordinates to millimetres.</p>
+            <h2>Inkscape Post-Processing (Mandatory)</h2>
+            <p>EzCad2 does not reliably interpret <code>&lt;polygon&gt;</code>, nested <code>&lt;g&gt;</code> groups, or
+                certain SVG constructs. This was established through trial-and-error in July 2025.</p>
+            <ol>
+                <li>Open the assembled SVG in Inkscape</li>
+                <li>Select All, then Edit &gt; Object to Path</li>
+                <li>Ungroup all nested groups</li>
+                <li>Delete the bounding rectangle (the bed outline)</li>
+                <li>Apply Stroke to Path if strokes are present</li>
+                <li>Save; the resulting SVG contains only flat <code>&lt;path&gt;</code> elements</li>
+            </ol>
+            <div class="note">On July 2, 2025, the first GA-optimised SVG loaded in EzCad2 displayed nested boundary
+                artifacts (one triangle rendered inside another). Inkscape XML editing resolved this, but the process
+                remains manual.</div>
+        </div>
+
+        <!-- 8 -->
+        <div class="slide">
+            <h1>Step 5: EzCad2 Automation (Single-Button Execution)</h1>
+            <p>File: <code>automation_8_fix.py</code>. Language: Python. Libraries: <code>pywinauto</code>,
+                <code>pyautogui</code>, <code>tkinter</code>, <code>win32gui</code>.
+            </p>
+            <h2>Purpose</h2>
+            <p>This script is the glue that makes the pipeline executable from a single button press. It launches
+                EzCad2, imports the assembled SVG, and then drives the entire per-layer laser marking loop
+                programmatically — no manual interaction required after pressing "Start".</p>
+            <h2>Per-Layer Automation Sequence</h2>
+            <pre>For each layer in the SVG:
+  1. Select first object in EzCad2 object list
+  2. Set X position to zero
+  3. Apply hatching (opens Hatch dialog, clicks OK)
+  4. Enable hatching checkbox
+  5. Set marking to BLACK parameters (750 mm/s, 50% power)
+  6. Fire Mark(F2) — wait for completion
+  7. Disable hatching checkbox
+  8. Set marking to BLUE parameters (120 mm/s, 85% power)
+  9. Fire Mark(F2) — wait for completion
+  10. Delete the current layer from object list
+  11. Wait for Next Layer Delay (configurable, default 40s)
+  12. Advance to next layer</pre>
+            <h2>Key Features</h2>
+            <table>
+                <tr>
+                    <th>Feature</th>
+                    <th>Detail</th>
+                </tr>
+                <tr>
+                    <td>GUI</td>
+                    <td>Tkinter interface: browse SVG file, set next-layer delay, window resize time, marking time,
+                        begin-at-layer-N</td>
+                </tr>
+                <tr>
+                    <td>Pause / Resume</td>
+                    <td>Threaded execution with pause/resume buttons; current layer completes before pausing</td>
+                </tr>
+                <tr>
+                    <td>Retry logic</td>
+                    <td>Each sub-step retries up to 3 times on failure; auto-pauses on 3 consecutive failures</td>
+                </tr>
+                <tr>
+                    <td>Layer counting</td>
+                    <td>Parses SVG to count <code>&lt;g&gt;</code> elements; live layer counter in the controls GUI</td>
+                </tr>
+                <tr>
+                    <td>Error logging</td>
+                    <td>All exceptions logged to <code>errorlog.txt</code> with timestamps</td>
+                </tr>
+                <tr>
+                    <td>Window management</td>
+                    <td>Auto-snaps EzCad2 to right half of screen; uses pyautogui for window positioning</td>
+                </tr>
+            </table>
+            <div class="note">This script automates what was previously a fully manual process: opening EzCad2,
+                importing the SVG, manually selecting each layer, setting hatching properties, firing the laser, and
+                deleting the layer. It uses pywinauto to send keyboard shortcuts and click UI elements by their Win32
+                control identifiers.</div>
+        </div>
+
+        <!-- 9 -->
+        <div class="slide">
+            <h1>Step 6: CNC / G-Code Generator</h1>
+            <p>File: <code>cnc_gen.py</code>. Language: Python. Output: <code>.nc</code> file.</p>
+            <h2>Generated G-Code Structure</h2>
+            <pre>%00001
+N10 G21                      (metric mode)
+Z85                          (initial bed height)
+
+Per layer i:
+  N{i}20 G91                 (incremental mode)
+  N{i}30 A{delta_x} B{delta_x}   (feed paper by X delta)
+  N{i}40 G90                 (absolute mode)
+  N{i}50 Y{y - 200 - 9.0}   (position Y, origin-corrected)
+  N{i}60 C{rotation}         (orient C-axis)
+  N{i}70 Z{78 + i * 0.1}    (lower bed to contact)
+  N{i}80 G04 X40             (dwell 40 seconds for laser)
+  N{i}90 Z{95 + i * 0.1}    (raise bed for clearance)</pre>
+            <h2>Coordinate Transform</h2>
+            <div class="box">
+                <p><code>y_machine = y_svg - 200 - y_corr</code></p>
+                <p>The laser origin is at the bed centreline; SVG origin is top-left. The -200 offset accounts for half
+                    the 400 mm bed width. <code>y_corr = 9.0</code> is an empirical correction factor.</p>
+            </div>
+            <h2>Progressive Increments</h2>
+            <table>
+                <tr>
+                    <th>Variable</th>
+                    <th>Initial</th>
+                    <th>Per-layer increment</th>
+                </tr>
+                <tr>
+                    <td>zHeight (contact)</td>
+                    <td>78 mm</td>
+                    <td>+0.1 mm</td>
+                </tr>
+                <tr>
+                    <td>z1Height (clearance)</td>
+                    <td>95 mm</td>
+                    <td>+0.1 mm</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- 10 -->
+        <div class="slide">
+            <h1>Operational Experience: Run 64</h1>
+            <p>The following data is from HeuristicLab Run 64, a representative overnight optimisation run.</p>
+            <h2>Run Summary</h2>
+            <table>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+                <tr>
+                    <td>Algorithm</td>
+                    <td>Genetic Algorithm (standard)</td>
+                </tr>
+                <tr>
+                    <td>Evaluated solutions</td>
+                    <td>1,069,501</td>
+                </tr>
+                <tr>
+                    <td>Generations</td>
+                    <td>71,299</td>
+                </tr>
+                <tr>
+                    <td>Execution time</td>
+                    <td>~21 hours</td>
+                </tr>
+                <tr>
+                    <td>Number of parts</td>
+                    <td>25</td>
+                </tr>
+                <tr>
+                    <td>Best quality</td>
+                    <td>44,262</td>
+                </tr>
+                <tr>
+                    <td>Best known quality</td>
+                    <td>44,270</td>
+                </tr>
+                <tr>
+                    <td>Relative difference</td>
+                    <td>99.98%</td>
+                </tr>
+                <tr>
+                    <td>Current average quality</td>
+                    <td>-128.75</td>
+                </tr>
+                <tr>
+                    <td>Current best quality</td>
+                    <td>-651</td>
+                </tr>
+            </table>
+            <h2>Observations</h2>
+            <ul>
+                <li>The average quality remains negative (many individuals still overlap), but the best solution
+                    converges to a high-quality overlap-free placement</li>
+                <li>Multiple runs (e.g. Run 70, Run 71) can produce different valid solutions</li>
+                <li>There is no guarantee of global optimality; longer runs and larger populations improve results</li>
+                <li>The crossover configuration (Rounded Average, Discrete, Blend Alpha-Beta with alpha=0.75) was found
+                    through iterative experimentation</li>
+            </ul>
+        </div>
+
+        <!-- 11 -->
+        <div class="slide">
+            <h1>Improvement Roadmap</h1>
+            <table>
+                <tr>
+                    <th>Area</th>
+                    <th>Current State</th>
+                    <th>Proposed Improvement</th>
+                </tr>
+                <tr>
+                    <td>Laser software</td>
+                    <td>EzCad2 (requires manual Inkscape cleanup)</td>
+                    <td>LaserGRBL: open-source, better SVG handling, eliminates the Inkscape step</td>
+                </tr>
+                <tr>
+                    <td>Evaluation speed</td>
+                    <td>Sequential C# evaluator called ~1M times</td>
+                    <td>MPI: distribute evaluations across cluster nodes. CUDA: GPU-parallel bitmap operations
+                        (BitwiseOR, CountNonZero)</td>
+                </tr>
+                <tr>
+                    <td>GA hyperparameters</td>
+                    <td>Fixed crossover type and rates</td>
+                    <td>Systematic tuning of crossover type, mutation rate, population size, and selection pressure
+                        across multiple runs</td>
+                </tr>
+                <tr>
+                    <td>Fitness function</td>
+                    <td>1D (horizontal compactness only)</td>
+                    <td>Multi-objective: vertical compactness, material utilisation percentage, cut-path length, thermal
+                        distribution</td>
+                </tr>
+                <tr>
+                    <td>Code structure</td>
+                    <td>6+ svg_placer variants, hardcoded chromosomes</td>
+                    <td>Unified configurable script with CLI/config input, unit tests, Docker containerisation</td>
+                </tr>
+                <tr>
+                    <td>Slicer</td>
+                    <td>IceSL (incompatible with lab PC)</td>
+                    <td>PrusaSlicer or a custom slicer producing SVG layers in the expected format</td>
+                </tr>
+                <tr>
+                    <td>SVG post-processing</td>
+                    <td>Manual Inkscape Object-to-Path</td>
+                    <td>Automate via Inkscape command-line interface or bake transforms into coordinates at Step 4
+                        (the_final_placeer.py approach)</td>
+                </tr>
+            </table>
+            <div class="note">The most impactful near-term improvement is replacing EzCad2 with LaserGRBL, followed by
+                parallelising the fitness evaluator. The GA tuning and fitness function improvements are longer-term
+                research directions.</div>
+        </div>
+
+        <!-- 12 -->
+        <div class="slide">
+            <h1>Dependencies and Setup</h1>
+            <div class="cols">
+                <div>
+                    <h2>Python (Steps 1, 4, 5)</h2>
+                    <table>
+                        <tr>
+                            <th>Library</th>
+                            <th>Used By</th>
+                        </tr>
+                        <tr>
+                            <td><code>cairosvg</code></td>
+                            <td>SVG to PNG rendering</td>
+                        </tr>
+                        <tr>
+                            <td><code>Pillow</code></td>
+                            <td>Image format conversion and thresholding</td>
+                        </tr>
+                        <tr>
+                            <td><code>lxml</code></td>
+                            <td>SVG/XML parsing and manipulation</td>
+                        </tr>
+                        <tr>
+                            <td><code>tkinter</code></td>
+                            <td>GUI for machine parameters</td>
+                        </tr>
+                    </table>
+                    <pre>pip install cairosvg pillow lxml pywinauto pyautogui pywin32</pre>
+                    <h2>Post-Processing</h2>
+                    <table>
+                        <tr>
+                            <td>Inkscape</td>
+                            <td>SVG cleanup (Object-to-Path, ungroup)</td>
+                        </tr>
+                        <tr>
+                            <td>EzCad2 or LaserGRBL</td>
+                            <td>Laser marking software</td>
+                        </tr>
+                    </table>
+                </div>
+                <div>
+                    <h2>C# / .NET (Step 2)</h2>
+                    <table>
+                        <tr>
+                            <th>Component</th>
+                            <th>Version</th>
+                        </tr>
+                        <tr>
+                            <td>.NET Runtime</td>
+                            <td>6.0 or later</td>
+                        </tr>
+                        <tr>
+                            <td>OpenCvSharp</td>
+                            <td>NuGet package</td>
+                        </tr>
+                        <tr>
+                            <td>Visual Studio</td>
+                            <td>For compilation to .exe</td>
+                        </tr>
+                    </table>
+                    <h2>HeuristicLab (Step 3)</h2>
+                    <table>
+                        <tr>
+                            <td>Platform</td>
+                            <td>Windows only (.NET Framework 4.7.2+)</td>
+                        </tr>
+                        <tr>
+                            <td>Download</td>
+                            <td>heuristiclab.com</td>
+                        </tr>
+                        <tr>
+                            <td>File format</td>
+                            <td>Binary .hl project file</td>
+                        </tr>
+                        <tr>
+                            <td>Hardware</td>
+                            <td>Lab workstation recommended for overnight runs</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <nav>
+        <button onclick="prev()" title="Previous">&#8592;</button>
+        <button onclick="next()" title="Next">&#8594;</button>
+    </nav>
+    <div class="counter" id="counter">1 / 13</div>
+
+    <script>
+        let cur = 0;
+        const slides = document.querySelectorAll('.slide');
+        const total = slides.length;
+        function show(n) { slides.forEach((s, i) => { s.classList.remove('active'); if (i === n) s.classList.add('active') }); document.getElementById('counter').textContent = `${n + 1} / ${total}` }
+        function next() { if (cur < total - 1) { cur++; show(cur) } }
+        function prev() { if (cur > 0) { cur--; show(cur) } }
+        document.addEventListener('keydown', e => { if (e.key === 'ArrowRight' || e.key === ' ') next(); if (e.key === 'ArrowLeft') prev() });
+    </script>
+</body>
+
+</html>
